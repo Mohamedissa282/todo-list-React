@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Construction } from "lucide-react";
 import { db } from "./firebase";
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc } from "firebase/firestore";
 
 type Priority = "Non commencé" | "En cours" | "Terminé";
 
