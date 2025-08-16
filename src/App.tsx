@@ -1,89 +1,88 @@
 import { useEffect, useState } from "react";
-import TodoItem from "./TodoItem";
 import { Construction } from "lucide-react";
+import { db } from "./firebase";
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from "firebase/firestore";
 
 type Priority = "Non commencé" | "En cours" | "Terminé";
 
 type Todo = {
-  id: number;
+  id?: string; // id venant de Firestore
   text: string;
-  priority: Priority
+  priority: Priority;
 }
 
 function App() {
-  const [input, setInput] = useState<string>("")
-  const [priority, setPriority] = useState<Priority>("En cours")
+  const [input, setInput] = useState<string>("");
+  const [priority, setPriority] = useState<Priority>("En cours");
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [filter, setFilter] = useState<Priority | "Tous">("Tous");
+  const [selectedTodos, setSelectedTodos] = useState<Set<string>>(new Set());
 
-  const savedTodos = localStorage.getItem("todos")
-  const initialTodos = savedTodos ? JSON.parse(savedTodos) : []
-  const [todos, setTodos] = useState<Todo[]>(initialTodos)
-  const [filter, setFilter] = useState<Priority | "Tous">("Tous")
-
+  // Charger les todos depuis Firestore
   useEffect(() => {
-    localStorage.setItem("todos", JSON.stringify(todos))
-  }, [todos])
+    const fetchTodos = async () => {
+      const querySnapshot = await getDocs(collection(db, "todos"));
+      const data: Todo[] = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        text: doc.data().text as string,
+        priority: doc.data().priority as Priority
+      }));
+      setTodos(data);
+    };
+    fetchTodos();
+  }, []);
 
-  function addTodo() {
-    if (input.trim() == "") {
-      return
-    }
+  // Ajouter un todo
+  const addTodo = async () => {
+    if (input.trim() === "") return;
 
     const newTodo: Todo = {
-      id: Date.now(),
       text: input.trim(),
-      priority: priority
+      priority
+    };
+
+    // Ajouter dans Firestore
+    const docRef = await addDoc(collection(db, "todos"), newTodo);
+
+    setTodos([{ ...newTodo, id: docRef.id }, ...todos]);
+    setInput("");
+    setPriority("En cours");
+  };
+
+  // Supprimer un todo
+  const deleteTodo = async (id: string) => {
+    await deleteDoc(doc(db, "todos", id));
+    setTodos(todos.filter(todo => todo.id !== id));
+  };
+
+  // Changer le statut
+  const changeStatus = async (id: string, newStatus: Priority) => {
+    const todoRef = doc(db, "todos", id);
+    await updateDoc(todoRef, { priority: newStatus });
+    setTodos(todos.map(todo => todo.id === id ? { ...todo, priority: newStatus } : todo));
+  };
+
+  // Sélection et suppression multiple
+  const toggleSelectTodo = (id: string) => {
+    const newSelected = new Set(selectedTodos);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelectedTodos(newSelected);
+  };
+
+  const finishSelected = async () => {
+    for (let id of selectedTodos) {
+      await deleteDoc(doc(db, "todos", id));
     }
+    setTodos(todos.filter(todo => !selectedTodos.has(todo.id!)));
+    setSelectedTodos(new Set());
+  };
 
-    const newTodos = [newTodo, ...todos]
-    setTodos(newTodos)
-    setInput("")
-    setPriority("En cours")
-    console.log(newTodos)
-  }
-
-  let filteredTodos: Todo[] = []
-
-  if (filter === "Tous") {
-    filteredTodos = todos
-  } else {
-    filteredTodos = todos.filter((todo) => todo.priority === filter)
-  }
-
-  const urgentCount = todos.filter((t) => t.priority === "Non commencé").length
-  const mediumCount = todos.filter((t) => t.priority === "En cours").length
-  const lowCount = todos.filter((t) => t.priority === "Terminé").length
-  const totalCount = todos.length
-
-  function deleteTodo(id: number) {
-    const newTodos = todos.filter((todo) => todo.id !== id)
-    setTodos(newTodos)
-  }
-
-  const [selectedTodos, setSelectedTodos] = useState<Set<number>>(new Set())
-
-
-  function toggleSelectTodo(id: number) {
-    const newSelected = new Set(selectedTodos)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
-    } else {
-      newSelected.add(id)
-    }
-    setSelectedTodos(newSelected)
-  }
-
-  function finishSelected() {
-    const newTodos = todos.filter((todo) => {
-      if (selectedTodos.has(todo.id)) {
-        return false
-      } else {
-        return true
-      }
-    })
-
-    setTodos(newTodos)
-    setSelectedTodos(new Set())
-  }
+  let filteredTodos: Todo[] = filter === "Tous" ? todos : todos.filter(todo => todo.priority === filter);
+  const urgentCount = todos.filter(t => t.priority === "Non commencé").length;
+  const mediumCount = todos.filter(t => t.priority === "En cours").length;
+  const lowCount = todos.filter(t => t.priority === "Terminé").length;
+  const totalCount = todos.length;
 
   return (
     <div className="flex justify-center">
@@ -109,70 +108,64 @@ function App() {
             Ajouter
           </button>
         </div>
+
         <div className="space-y-2 flex-1 h-fit">
           <div className="flex items-center justify-between">
             <div className="flex flex-wrap gap-4">
-              <button
-                className={`btn btn-soft ${filter === "Tous" ? "btn-primary" : ""}`}
-                onClick={() => setFilter("Tous")}
-              >
-                Tous ({totalCount})
-              </button>
-              <button
-                className={`btn btn-soft ${filter === "Non commencé" ? "btn-primary" : ""}`}
-                onClick={() => setFilter("Non commencé")}
-              >
-                Non commencé ({urgentCount})
-              </button>
-              <button
-                className={`btn btn-soft ${filter === "En cours" ? "btn-primary" : ""}`}
-                onClick={() => setFilter("En cours")}
-              >
-                En cours ({mediumCount})
-              </button>
-              <button
-                className={`btn btn-soft ${filter === "Terminé" ? "btn-primary" : ""}`}
-                onClick={() => setFilter("Terminé")}
-              >
-                Terminé ({lowCount})
-              </button>
+              <button className={`btn btn-soft ${filter === "Tous" ? "btn-primary" : ""}`} onClick={() => setFilter("Tous")}>Tous ({totalCount})</button>
+              <button className={`btn btn-soft ${filter === "Non commencé" ? "btn-primary" : ""}`} onClick={() => setFilter("Non commencé")}>Non commencé ({urgentCount})</button>
+              <button className={`btn btn-soft ${filter === "En cours" ? "btn-primary" : ""}`} onClick={() => setFilter("En cours")}>En cours ({mediumCount})</button>
+              <button className={`btn btn-soft ${filter === "Terminé" ? "btn-primary" : ""}`} onClick={() => setFilter("Terminé")}>Terminé ({lowCount})</button>
             </div>
-            <button
-              onClick={finishSelected}
-              className="btn btn-primary"
-              disabled={selectedTodos.size == 0}
-            >
+            <button onClick={finishSelected} className="btn btn-primary" disabled={selectedTodos.size === 0}>
               Finir la sélection ({selectedTodos.size})
             </button>
-
           </div>
 
-
-          {filteredTodos.length > 0 ? (
-            <ul className="divide-y divide-primary/20">
-              {filteredTodos.map((todo) => (
-                <li key={todo.id}>
-                  <TodoItem
-                    todo={todo}
-                    isSelected={selectedTodos.has(todo.id)}
-                    onDelete={() => deleteTodo(todo.id)}
-                    onToggleSelect={toggleSelectTodo}
-                  />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="flex justify-center items-center flex-col p-5">
-              <div>
-                <Construction strokeWidth={1} className="w-40 h-40 text-primary" />
-              </div>
-              <p className="text-sm">Aucune tâche pour ce filtre</p>
-            </div>
-          )}
+         {filteredTodos.length > 0 ? (
+  <ul className="divide-y divide-primary/20">
+    {filteredTodos.map(todo => (
+      <li key={todo.id} className="p-3">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-primary checkbox-sm"
+              checked={selectedTodos.has(todo.id!)}
+              onChange={() => toggleSelectTodo(todo.id!)}
+            />
+            <span className="text-md font-bold">{todo.text}</span>
+            <span
+              className={`badge badge-sm badge-soft
+                ${todo.priority === "Non commencé" ? "badge-error"
+                  : todo.priority === "En cours" ? "badge-warning"
+                    : "badge-success"}`}
+            >
+              {todo.priority}
+            </span>
+          </div>
+          <button
+            onClick={() => deleteTodo(todo.id!)}
+            className="btn btn-sm btn-error btn-soft"
+          >
+            Supprimer
+          </button>
+        </div>
+      </li>
+    ))}
+  </ul>
+) : (
+  <div className="flex justify-center items-center flex-col p-5">
+    <div>
+      <Construction strokeWidth={1} className="w-40 h-40 text-primary" />
+    </div>
+    <p className="text-sm">Aucune tâche pour ce filtre</p>
+  </div>
+)}
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
