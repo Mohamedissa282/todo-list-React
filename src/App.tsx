@@ -56,11 +56,7 @@ function App() {
   };
 
   // Changer le statut
-  const changeStatus = async (id: string, newStatus: Priority) => {
-    const todoRef = doc(db, "todos", id);
-    await updateDoc(todoRef, { priority: newStatus });
-    setTodos(todos.map(todo => todo.id === id ? { ...todo, priority: newStatus } : todo));
-  };
+ 
 
   // Sélection et suppression multiple
   const toggleSelectTodo = (id: string) => {
